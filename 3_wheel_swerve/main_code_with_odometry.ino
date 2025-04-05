@@ -1,4 +1,4 @@
-#include "bts.h"
+// #include "bts.h"
 #include <Wire.h>
 #include <Encoder.h>
 #include <ODriveSwerve.h>
@@ -6,43 +6,47 @@
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
 
-Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28, &Wire2);
+Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28, &Wire);
 
 #define pwm 90
-#define vel_const 0.4
+#define vel_const 0.3
 #define dia 7
 
-#define r_pwm1 9
-#define l_pwm1 8
-#define l_pwm2 7
-#define r_pwm2 6
-#define l_pwm3 5
-#define r_pwm3 4
+#define l_pwm1 2
+#define r_pwm1 3
+
+#define l_pwm2 4
+#define r_pwm2 5
+
+#define l_pwm3 10
+#define r_pwm3 9
 
 int velocity;
 int axis = 0;
 
 //Encoder Pins
-int enco1A = 26;
-int enco1B = 27;
+int enco1A = 0;
+int enco1B = 1;
 //Encoder Pins
-int enco2A = 33;
-int enco2B = 32;
+int enco2A = 15;
+int enco2B = 14;
 //Encoder Pins
-int enco3A = 38;
-int enco3B = 37;
+int enco3A = 31;
+int enco3B = 30;
 
-bts bts1(r_pwm1,l_pwm1);
-bts bts2(r_pwm2,l_pwm2);
-bts bts3(r_pwm3,l_pwm3);
+int a = 1;
+
+// bts bts1(r_pwm1,l_pwm1);
+// bts bts2(r_pwm2,l_pwm2);
+// bts bts3(r_pwm3,l_pwm3);
 
 Encoder enco1(enco1A, enco1B);
 Encoder enco2(enco2A, enco2B);
 Encoder enco3(enco3A, enco3B);
 
-ODriveSwerve odrive1(Serial1);
-ODriveSwerve odrive2(Serial5);
-ODriveSwerve odrive3(Serial3);
+ODriveSwerve odrive1(Serial5);
+ODriveSwerve odrive2(Serial7);
+ODriveSwerve odrive3(Serial8);
 
 long cpr1 = 465098;
 long cpr2 = 467189;
@@ -62,9 +66,9 @@ float o2_x = 12.5  ,o2_y = -21.65;
 float o3_x = -12.5 ,o3_y = -21.65;
 
 byte psData[3];
-int leftX;
-int leftY;
-int oMega;
+int8_t leftX =0;
+int8_t leftY =0;
+int8_t oMega;
 int o;
 int mg;
 int theta;
@@ -91,21 +95,22 @@ int prevError;
 long prevT, currT;
 
 int angular_limit = 60;
-float sMultiplier = 1.5;
+float sMultiplier = 0.5;
 
 void getData() {
 
-// reciving data from PS4 ---(Bluetooth)---> UNO(HOSTSHIELD)(SPI) ---(I2C)---> Teensy ;
-  Wire1.requestFrom(8, 3);
-  while (Wire1.available()>2) {
+  Wire2.requestFrom(8, 3);
+  while (Wire2.available()== 3) {
     
-    Wire1.readBytes(psData, 3);
+    Wire2.readBytes(psData, 3);
     leftX = psData[0];
     leftY = psData[1];
     oMega = psData[2];
-    // leftX = map(leftX, -1, 255, -127, 127);
-    // leftY = map(leftY, -1, 255, 127, -127);
-    // oMega = map(oMega,  0, 255, -127, 127);
+    if(oMega == -128){
+      oMega = 127;
+    }
+
+
   }
     // calculating angle of ps4 joystick using its X and Y co-ordinate;
   theta = (atan2(leftX,leftY) * RAD_TO_DEG);
@@ -114,7 +119,7 @@ void getData() {
   // Serial.println(oMega);
   // calculating magnitude of ps4 joystick using its X and Y co-ordinate;
   mg = sqrt(pow(leftX,2)+pow(leftY,2));
-  o = oMega;
+  o = -oMega;
   if (mg > 30 || abs(o) > 10) {
     if(mg>30){
       flag = mg>30?1:0;
@@ -146,11 +151,11 @@ void angularPID(double kp, double ki, double kd) {
     botErrorAngle -= 360;  //-10
   }
   
-  currT = millis();
 
+  currT = micros();
   derivative_error = (botErrorAngle - prevError)/(currT - prevT);
   integral_error += botErrorAngle; 
-  oMega = -(kp * botErrorAngle + ki * integral_error + kd * derivative_error);
+  oMega = -( (kp * botErrorAngle) + (derivative_error*kd) + (ki * integral_error));
   prevError = botErrorAngle;
 
   prevT = currT;
@@ -158,27 +163,35 @@ void angularPID(double kp, double ki, double kd) {
   if (botErrorAngle < 10 && botErrorAngle > -10) {
     PidFlag = 0;
     sPidFlag = 1;
-    oMegaP = oMega;
+    oMegaP = -oMega;
     if (abs(o) < 10 && flag ==0) {
       oMega = 0;
     } 
     else{
-      oMega = map(o, 0, 126, 0, angular_limit);
+      oMega = map(o, 0, 128, 0, angular_limit);
       oMegaP = 0;
     }
-    // if(flag == 1){
-    //   oMega = oMegaP;
-    //   oMegaP = 0;
-    // }
+    if(flag == 1){
+      oMegaP = 0;
+    }
   }
   else{
     PidFlag = 1;
     sPidFlag = 0;
     oMegaP = 0;
   }
+  if((botErrorAngle < 1.5 && botErrorAngle > -1.5)){
+    PidFlag = 0;
+    sPidFlag = 0;
+    oMegaP = 0;
+  }
 
   oMega = constrain(oMega, -angular_limit, angular_limit);
   oMegaP = constrain(oMegaP, -angular_limit, angular_limit);
+
+
+  Serial.print((String) "bAng:" + botAngle + " bAngEr:" + botErrorAngle + " pT:" + (botErrorAngle * kp) + "dT:"+(derivative_error*kd)+ " oMega" + oMega
+  + " omegaP:" + oMegaP + " sP:" + sPidFlag + " pf:" + PidFlag + " f:" + flag);
 }
 
 void res_co_ordinate(){
@@ -214,13 +227,12 @@ private:
   int TA = 0;
   int mag;
   int ang;
-  int dir;
   int shortestAngle = 0;
   vctor h,w;
   int  dis;
   
   int index;
-  bts& motor;
+  int Rpwm,Lpwm;
   Encoder& enco;
   ODriveSwerve& odrive;
   long cpr;
@@ -228,17 +240,27 @@ private:
   float origin_x, origin_y;
   float x = 0, y = 0;
   double user_view_ang = 0;
-
+  int rot_ang = (90 + (240* (index-1)))%360;
+  
+  int ANGLE = 0;
+  int VELOCITY = 0;
+  
 
 public:
+  int dir;
   int target_angle;
   int angtemp;
   // Module(int index, int Rpwm, int Lpwm, Encoder& enco, ODriveSwerve& odrive, long cpr) : enco(enco), odrive(odrive){
-  Module(int index, bts& motor, Encoder& enco, ODriveSwerve& odrive, long cpr, float origin_x, float origin_y) :
-         index(index), motor(motor), enco(enco), odrive(odrive), cpr(cpr), origin_x(origin_x), origin_y(origin_y) {
-    // this-> Rpwm = Rpwm;
-    // this-> Lpwm = Lpwm;
+  Module(int index, int Rpwm, int Lpwm, Encoder& enco, ODriveSwerve& odrive, long cpr, float origin_x, float origin_y) :
+         index(index), enco(enco), odrive(odrive), cpr(cpr), origin_x(origin_x), origin_y(origin_y) {
+    this-> Rpwm = Rpwm;
+    this-> Lpwm = Lpwm;
       // this-> cpr = cpr;
+  }
+
+  void motor(int r, int l){
+    analogWrite(Rpwm, r);
+    analogWrite(Lpwm, l);
   }
 
   int distance(){
@@ -270,7 +292,7 @@ public:
     // Serial.println(mg);
     // Serial.print(theta - botAngle);
     h.update(mg, theta - botAngle);       //      
-    w.update(oMega, 270 + (60 * (index - 1) ));  // 270/330/390(30)
+    w.update(oMega, 270 - (120 * (index - 1) ));  // 270/330/390(30)
     h.resolve();
     w.resolve();
     // Serial.println();
@@ -280,27 +302,23 @@ public:
     mag = sqrt(pow(X, 2) + pow(Y, 2));
     ang = atan2(Y, X) * 180 / M_PI;
     ang = (ang + 360) % 360;
+    if(flag == 1){
+      ANGLE = ang;
+    }
     // Serial.println((String)"      mag:"+mag+"\t ang"+ang);
   }
 
   int statutoryPID(float velocity) {
-      if ((target_angle <= 45) || (target_angle >= 135 && target_angle <= 225) || (target_angle >= 315)) {
-        if (index == 1 || index == 4) {
-          velocity = sMultiplier*(oMegaP * cos(target_angle * M_PI / 180));  // Convert angle to radians
-        } 
-        else if (index == 2 || index == 3) {
-          velocity = -sMultiplier*(oMegaP * cos(target_angle * M_PI / 180));
-        }
-      }
+    user_view_ang = ((int)botAngle + target_angle)%360;
 
-      else if ((target_angle > 45 && target_angle < 135)||(target_angle >225 && target_angle < 315)) {
-          if (index == 1 || index == 2) {
-            velocity = -sMultiplier*(oMegaP * sin(target_angle * M_PI / 180));  // Convert angle to radians
-          } 
-          else if (index == 3 || index == 4) {
-            velocity = sMultiplier*(oMegaP * sin(target_angle * M_PI / 180));
-          }
-        } 
+    if(ang < rot_ang+5 && ang>rot_ang-5){
+      sPidFlag = 0; 
+    }
+    else{
+    velocity = sMultiplier*oMegaP*cos((abs(rot_ang-user_view_ang))*PI/180);
+    }
+    // Serial.print((String)"\t"+" Velocity:"+velocity+index+"Angle:"+user_view_ang+"RotAngle:"+rot_ang+" cos:"+cos((abs(rot_ang-user_view_ang))*PI/180)+"\t");
+
     return velocity;
   }
 
@@ -312,15 +330,12 @@ public:
 
     if (sPidFlag == 1 && flag == 0) {
       *velocity = statutoryPID(*velocity);
+      
     }
+    VELOCITY = *velocity;
 
     // Serial.println((String)*velocity + " " + *angle);
   }
-
-  // void motor(int r, int l){
-  //   analogWrite(Rpwm, r);
-  //   analogWrite(Lpwm, l);
-  // }
 
   int t2a(){
     long tick = enco.read();
@@ -360,20 +375,21 @@ public:
 
     if(nArc == 360){
       // motor(0, 0);     
-      motor.rotate(0);     
+      motor(0,0);     
     }
-    else if (pArc < nArc && ((nArc - pArc) < (360 - 7))) {
+    else if (pArc < nArc && ((nArc - pArc) < (360 - 10))) {
       // motor(pwm, 0);  
-      motor.rotate(pwm);  
+      motor(pwm,0);  
     }
-    else if(nArc < pArc && ((pArc - nArc) < (360 - 7))){
+    else if(nArc < pArc && ((pArc - nArc) < (360 - 10))){
       // motor(0, pwm);  
-      motor.rotate(-pwm);  
+      motor(0,pwm);  
     }
     else {
       // motor(0, 0);  
-      motor.rotate(0);  
+      motor(0,0);  
     }
+    // Serial.print((String)dir + "  ");
   }
 
   void setVelocity(int vel) {
@@ -389,22 +405,21 @@ public:
     odrive.setVelocity(axis, velocity);
   }
 
-  void checkOdrive() {
-    Serial.println("Waiting for ODrive");
-    Serial.print(index);
-    while (odrive.getState() == AXIS_STATE_UNDEFINED) {
-      delay(10);
-    }
-
-    Serial.print("DC voltage: ");
-    Serial.println(odrive.getParameterAsFloat("vbus_voltage"));
-
-    Serial.println("Enabling closed loop control...");
-    while (odrive.getState() != AXIS_STATE_CLOSED_LOOP_CONTROL) {
+  void odrivecheck(){
+    if (odrive.getProcedureResult() == PROCEDURE_RESULT_DISARMED) {
       odrive.clearErrors();
       odrive.setState(AXIS_STATE_CLOSED_LOOP_CONTROL);
-      delay(10);
     }
+  }
+
+  void printf(){
+    Serial.print((String)"\t"+index+" Vel:"+VELOCITY);
+    Serial.print((String)" Ang:"+ANGLE);
+    Serial.print((String)" UAng:"+((int)botAngle + ANGLE)%360);
+    Serial.print((String)" RotAngle:"+rot_ang);
+    Serial.print((String)" Cos:"+cos((abs(rot_ang-target_angle))*PI/180));
+
+
   }
 
 };
@@ -413,18 +428,17 @@ public:
 // Module Module2(2, r_pwm2, l_pwm2, enco2, odrive2, cpr2);
 // Module Module3(3, r_pwm3, l_pwm3, enco3, odrive3, cpr3);
 
-Module Module1(1, bts1, enco1, odrive1, cpr1, o1_x, o1_y);
-Module Module2(2, bts2, enco2, odrive2, cpr2, o2_x, o2_y);
-Module Module3(3, bts3, enco3, odrive3, cpr3, o3_x, o3_y);
+Module Module1(1, r_pwm1, l_pwm1, enco1, odrive1, cpr1, o1_x, o1_y);
+Module Module2(2, r_pwm2, l_pwm2, enco2, odrive2, cpr2, o2_x, o2_y);
+Module Module3(3, r_pwm3, l_pwm3, enco3, odrive3, cpr3, o3_x, o3_y);
 
 void setup() {
-  Wire1.begin();
 
   Serial.begin(115200);
 
-  Serial1.begin(115200);
   Serial5.begin(115200);
-  Serial3.begin(115200);
+  Serial7.begin(115200);
+  Serial8.begin(115200);
   // while (!Serial) delay(10);  // wait for serial port to open!
 
   /* Initialise the sensor */
@@ -435,28 +449,47 @@ void setup() {
     while (1);
   }
 
-  delay(1000);
+  // delay(1000);
+  Serial.println("Started...");
+  // delay(1000);
+  Wire2.begin();
 
   bno.setExtCrystalUse(true);
 
-  // pinMode(l_pwm1, OUTPUT);
-  // pinMode(r_pwm1, OUTPUT);
-  // pinMode(l_pwm2, OUTPUT);
-  // pinMode(r_pwm2, OUTPUT);
-  // pinMode(l_pwm3, OUTPUT);
-  // pinMode(r_pwm3, OUTPUT);
+  pinMode(l_pwm1, OUTPUT);
+  pinMode(r_pwm1, OUTPUT);
+  pinMode(l_pwm2, OUTPUT);
+  pinMode(r_pwm2, OUTPUT);
+  pinMode(l_pwm3, OUTPUT);
+  pinMode(r_pwm3, OUTPUT);
 
+  // delay(1000);
   // delay(500);
+  // Module1.checkOdrive();
+  // Module2.checkOdrive();
+  // Module3.checkOdrive();
+
+
 }
 
 void loop() {
+  // while(a){
+    
+  //   a = 0;
+  // }
+
   imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
   botAngle = euler.x();
 
   // Serial.println(botAngle);
   getData();
   
-  angularPID(0.4, 0.0001,1);
+  //         kp     ki    kd
+  angularPID(1, 0.0002, 1000);
+
+  Module1.odrivecheck();
+  Module2.odrivecheck();
+  Module3.odrivecheck();
 
   Module1.compute(&angle1, &velocity1);
   Module2.compute(&angle2, &velocity2);
@@ -466,17 +499,34 @@ void loop() {
   Module2.actuate(angle2, velocity2);
   Module3.actuate(angle3, velocity3);
 
-  Module1.co_ordinate(botAngle, angle1, &Px1, &Py1);
-  Module2.co_ordinate(botAngle, angle2, &Px2, &Py2);
-  Module3.co_ordinate(botAngle, angle3, &Px3, &Py3);
+  Module1.printf();
+  Module2.printf();
+  Module3.printf();
+  // Serial.print(Module1.t2a());
+  // Serial.print(" ");
+  // Serial.print(Module2.t2a());
+  // Serial.print(" ");
+  // Serial.println(Module3.t2a());
 
-  res_co_ordinate();
+  // Module1.co_ordinate(botAngle, angle1, &Px1, &Py1);
+  // Module2.co_ordinate(botAngle, angle2, &Px2, &Py2);
+  // Module3.co_ordinate(botAngle, angle3, &Px3, &Py3);
 
-  Serial.print((String)"Rx: " + Rx + "  Ry: " + Ry);
-  // Serial.print((String)"target_angle  " + Module1.target_angle + "     BotErrorAngle : " + botErrorAngle + "    Spid" + sPidFlag);
+  // res_co_ordinate();
 
+  // Serial.print((String)"Rx: " + Rx + "  Ry: " + Ry);
+  // Serial.print((String)"target_angle  " + Module3.target_angle + "     BotErrorAngle : " + botErrorAngle + "    Spid" + sPidFlag);
+  // Serial.println((String)"left"+ leftX +" y:" + leftY+"   "+psData[2]+"   " + oMega);
+  // Serial.println((String)velocity1 + "    " + velocity2 + "   " + velocity3);
+  // Serial.print(leftX);
+  // Serial.print("\t");
+  // Serial.print(leftY);
+  // Serial.print("\t");
+
+  // Serial.println();
   leftX = 0;
   leftY = 0;
   oMega = 0;
   Serial.println();
+  delay(10);
 }
