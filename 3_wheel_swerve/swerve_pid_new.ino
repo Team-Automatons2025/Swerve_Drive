@@ -102,7 +102,8 @@ unsigned long pST;
 int angular_limit = 60;
 float sMultiplier = 0.7;
 
-
+long check_time_curr = 0;
+long check_time_prev = 0;
 
 void getData() {
 
@@ -439,11 +440,11 @@ public:
       // motor(0, 0);     
       motor(0,0);     
     }
-    else if (pArc < nArc && ((nArc - pArc) < (360 - 10))) {
+    else if (pArc < nArc && ((nArc - pArc) < (360 - 7))) {
       // motor(pwm, 0);  
       motor(pwm,0);  
     }
-    else if(nArc < pArc && ((pArc - nArc) < (360 - 10))){
+    else if(nArc < pArc && ((pArc - nArc) < (360 - 7))){
       // motor(0, pwm);  
       motor(0,pwm);  
     }
@@ -564,6 +565,7 @@ void setup() {
 }
 
 void loop() {
+  check_time_curr = millis();
   imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
   botAngle = euler.x(); 
 
@@ -573,9 +575,12 @@ void loop() {
   //         kp     ki    kd
   angularPID(0.6, 0.0001, 50);
 
-  // Module1.checkOdrive();
-  // Module2.checkOdrive();
-  // Module3.checkOdrive();
+  if(check_time_curr - check_time_prev >= 1000){
+    Module1.checkOdrive();
+    Module2.checkOdrive();
+    Module3.checkOdrive();
+    check_time_prev = check_time_curr;
+  }
 
   Module1.compute(&angle1, &velocity1);
   Module2.compute(&angle2, &velocity2);
