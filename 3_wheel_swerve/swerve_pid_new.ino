@@ -80,6 +80,7 @@ int flag = 0;
 int PidFlag = 0;
 int sPidFlag = 0;
 int oMegaFlag = 0;
+int noPid =0 ;
 
 float angle1, velocity1;
 float angle2, velocity2;
@@ -122,7 +123,7 @@ void getData() {
   theta = (theta + 360)%360;
   mg = sqrt(pow(leftX,2)+pow(leftY,2));
   // Serial.println(theta);
-  // Serial.println(oMega);
+  // Serial.println(oMegaR);
 
   if(dir_buttons && dir_buttons != 255){
     if (dir_buttons & 1 << 4 && dir_buttons & 1 << 5) {
@@ -177,10 +178,7 @@ void getData() {
   }
 
   if (abs(oMegaR) > 20) {
-    if(millis()>(pST + bAngSR)){
-      botTargetAngle = botAngle;
-      pST = millis();
-    }
+
     oMegaFlag =1;
     oMega = map(oMegaR,0,127,0,64);
     oMegaR = oMega;
@@ -194,6 +192,17 @@ void getData() {
 
 void angularPID(double kp, double ki, double kd) {
 
+  if(oMegaFlag == 0 && noPid == 1){
+    if(abs(odrive1.getVelocity()) <=2 && abs(odrive2.getVelocity()) <=2 && abs(odrive3.getVelocity()) <=2){
+      noPid = 0;
+    }
+    else{
+      botTargetAngle = botAngle;
+    }  
+  }
+  if(oMegaFlag == 1){
+    botTargetAngle = botAngle;
+  }
   botErrorAngle = botTargetAngle - botAngle;  // 0 // 350 // -350
 
   if (botErrorAngle < -180) {
@@ -239,14 +248,17 @@ void angularPID(double kp, double ki, double kd) {
   }
   oMega = sPidFlag==1?0:(PidFlag==1?-oMegaP:oMegaR);
   
-  
+  if(oMegaFlag == 1 && noPid == 0){
+    noPid = 1;
+  }
 
   oMega = constrain(oMega, -angular_limit, angular_limit);
   oMegaS = constrain(oMegaP, -angular_limit, angular_limit);
 
 
-  // Serial.print((String) "bAng:" + botAngle + " bAngEr:" + botErrorAngle + " pT:" + (botErrorAngle * kp) + "dT:"+(derivative_error*kd)+ " oMega:" + oMega 
-  // +" oR:"+oMegaR+ " omegaP:" + -oMegaP +"oS:"+oMegaS+"of:"+oMegaFlag+" sP:" + sPidFlag + " pf:" + PidFlag + " f:" + flag);
+  Serial.print((String) "bAng:" + botAngle + " bAngEr:" + botErrorAngle + " pT:" + (botErrorAngle * kp) + "dT:"+(derivative_error*kd)+ " oMega:" + oMega 
+  +" oR:"+oMegaR+ " omegaP:" + -oMegaP +" oS:"+oMegaS+" of:"+oMegaFlag+" nF:"+noPid+" sP:" + sPidFlag + " pf:" + PidFlag + " f:" + flag);
+      Serial.print((String)"  " + odrive1.getVelocity() + "   " + odrive2.getVelocity() + "   " + odrive3.getVelocity()+"   ");
 }
 
 void res_co_ordinate(){
@@ -561,9 +573,9 @@ void loop() {
   //         kp     ki    kd
   angularPID(0.6, 0.0001, 50);
 
-  Module1.checkOdrive();
-  Module2.checkOdrive();
-  Module3.checkOdrive();
+  // Module1.checkOdrive();
+  // Module2.checkOdrive();
+  // Module3.checkOdrive();
 
   Module1.compute(&angle1, &velocity1);
   Module2.compute(&angle2, &velocity2);
@@ -601,7 +613,7 @@ void loop() {
   leftX = 0;
   leftY = 0;
   oMega = 0;
-  
+  // Serial.print(millis());
   Serial.println();
-  delay(10);
+  // delay(10);
 }
